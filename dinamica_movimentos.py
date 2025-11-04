@@ -220,4 +220,3 @@ if __name__ == '__main__':
     run_simulation(os4, duration=7, movement_type='go_down', initial_state=initial_state_down)
         
     print("\nTodas as simulações foram concluídas e salvas como GIFs.")
-    
