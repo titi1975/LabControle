@@ -162,13 +162,13 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
     
     # Loop Externo (Posição)
     # Z (Altitude)
-    z_gains = {'Kp': 30.0, 'Ki': 15.0, 'Kd': 20.0, 'anti_windup_limit': 15.0}
+    z_gains = {'Kp': 30.0, 'Ki': 25.0, 'Kd': 20.0, 'anti_windup_limit': 15.0}
     # X/Y (Posição Horizontal) -> Saída é um ÂNGULO desejado
     xy_gains = {'Kp': 0.8, 'Ki': 0.2, 'Kd': 0.5, 'anti_windup_limit': np.deg2rad(15)} # Limite de inclinação
 
     # Loop Interno (Atitude)
     # Roll/Pitch -> Saída é um TORQUE
-    attitude_gains = {'Kp': 0.1, 'Ki': 0.0, 'Kd': 0.05, 'anti_windup_limit': 0.5}
+    attitude_gains = {'Kp': 0.8, 'Ki': 0.5, 'Kd': 0.2, 'anti_windup_limit': 0.5}
     # Yaw -> Saída é um TORQUE
     yaw_gains = {'Kp': 0.1, 'Ki': 0.01, 'Kd': 0.05, 'anti_windup_limit': 0.5}
 
