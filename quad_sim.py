@@ -9,37 +9,31 @@ import os
 # ==============================================================================
 class PIDController:
     """
-    Implementação de um controlador PID (Proporcional-Integral-Derivativo).
+    Implementação de um controlador PID 
     """
     def __init__(self, Kp, Ki, Kd, setpoint=0.0, anti_windup_limit=1.0):
         self.Kp = Kp
         self.Ki = Ki
         self.Kd = Kd
         self.setpoint = setpoint
-        
         self.integral = 0.0
         self.prev_error = 0.0
-        
-        # Limite 'anti-windup' para evitar que o termo integral cresça indefinidamente
         self.anti_windup_limit = anti_windup_limit
 
     def set_setpoint(self, setpoint):
-        """Define o valor desejado (alvo)."""
         self.setpoint = setpoint
 
     def update(self, current_value, dt):
-        """Calcula a saída do controlador com base no valor atual."""
         error = self.setpoint - current_value
         
         # Termo Proporcional
         P_term = self.Kp * error
         
-        # Termo Integral (com anti-windup)
+        # Termo Integral
         self.integral += error * dt
         self.integral = np.clip(self.integral, -self.anti_windup_limit, self.anti_windup_limit)
         I_term = self.Ki * self.integral
         
-        # Termo Derivativo (com filtro para evitar picos)
         # Usamos (erro_atual - erro_anterior) / dt
         derivative = (error - self.prev_error) / dt
         D_term = self.Kd * derivative
@@ -55,44 +49,39 @@ class PIDController:
 # 2. CLASSE DO QUADRICÓPTERO (MODIFICADA)
 # ==============================================================================
 class Quadrotor:
-    """
-    Classe que representa o modelo dinâmico de um quadricóptero.
-    MODIFICADA: A função 'dynamics' agora aceita 'inputs' (w1, w2, w3, w4).
-    """
+
     def __init__(self):
-        # Parâmetros físicos (OS4)
         self.m = 0.650
         self.g = 9.81
         self.Ixx = 7.5e-3
         self.Iyy = 7.5e-3
         self.Izz = 1.3e-2
         self.l = 0.23
-        self.b = 3.13e-5 # Coef. de empuxo
-        self.d = 7.5e-7  # Coef. de arrasto
+        self.b = 3.13e-5 #  empuxo
+        self.d = 7.5e-7  # arrasto
         
-        # Modelo de contato com o solo
+        # Dinamica solo
         self.ground_k = 500.0
         self.ground_c = 100.0
 
-        # Estado inicial (sempre começa do chão)
+        # Estado inicial
         self.initial_state = np.zeros(12)
 
     def dynamics(self, t, state, inputs):
         """
-        Define as equações diferenciais.
-        'inputs' é um array [w1, w2, w3, w4] com as velocidades dos rotores.
+         [w1, w2, w3, w4] com as velocidades dos rotores.
         """
         w1, w2, w3, w4 = inputs
         
         x, y, z, vx, vy, vz, phi, theta, psi, p, q, r = state
         
-        # Forças e Torques (calculados a partir das entradas w_i)
+        # Forças e Torques 
         T = self.b * (w1**2 + w2**2 + w3**2 + w4**2)
         tau_phi = self.l * self.b * (w4**2 - w2**2)
         tau_theta = self.l * self.b * (w1**2 - w3**2)
         tau_psi = self.d * (w1**2 - w2**2 + w3**2 - w4**2)
         
-        # Matriz de Rotação (Corpo -> Inercial)
+        # Matriz de Rotação 
         R_x = np.array([[1, 0, 0],
                         [0, np.cos(phi), -np.sin(phi)],
                         [0, np.sin(phi), np.cos(phi)]])
@@ -107,7 +96,7 @@ class Quadrotor:
                         
         R = R_z @ R_y @ R_x
         
-        # Aceleração translacional
+        # translacional
         thrust_world = R @ np.array([0, 0, T])
         gravity_world = np.array([0, 0, -self.m * self.g])
         
@@ -152,27 +141,16 @@ class Quadrotor:
 # ==============================================================================
 def run_pid_simulation(quad, target_pos, duration, dt=0.01):
     """
-    Executa a simulação de controle PID em loop fechado.
     'target_pos' é [x_des, y_des, z_des, psi_des].
     """
     
-    # --- Ponto 1: Ganhos PID (A "Sintonia Heurística") ---
-    # Estes são os ganhos "projetados heuristicamente" (na prática, ajustados
-    # por tentativa e erro). Eles são o coração do seu pedido.
-    
     # Loop Externo (Posição)
-    # Z (Altitude)
     z_gains = {'Kp': 46.833, 'Ki': 16.85, 'Kd': 15.101, 'anti_windup_limit': 15.0}
-    # X/Y (Posição Horizontal) -> Saída é um ÂNGULO desejado
     xy_gains = {'Kp': 0.845, 'Ki': 0.195, 'Kd': 0.485, 'anti_windup_limit': np.deg2rad(15)} # Limite de inclinação
 
     # Loop Interno (Atitude)
-    # Roll/Pitch -> Saída é um TORQUE
     attitude_gains = {'Kp': 0.738, 'Ki': 0.492, 'Kd': 0.207, 'anti_windup_limit': 0.5}
-    # Yaw -> Saída é um TORQUE
     yaw_gains = {'Kp': 0.109, 'Ki': 0.011, 'Kd': 0.051, 'anti_windup_limit': 0.5}
-
-    # --- Ponto 2: Inicialização dos Controladores ---
     
     # Controladores de Posição (Loop Externo)
     pid_z = PIDController(setpoint=target_pos[2], **z_gains)
@@ -180,11 +158,10 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
     pid_y = PIDController(setpoint=target_pos[1], **xy_gains)
 
     # Controladores de Atitude (Loop Interno)
-    pid_phi = PIDController(**attitude_gains)   # Setpoint é dinâmico (vem do PID de Y)
-    pid_theta = PIDController(**attitude_gains) # Setpoint é dinâmico (vem do PID de X)
+    pid_phi = PIDController(**attitude_gains)  
+    pid_theta = PIDController(**attitude_gains) 
     pid_psi = PIDController(setpoint=target_pos[3], **yaw_gains)
 
-    # --- Ponto 3: Misturador de Controle (Inverso da Dinâmica) ---
     # Mapeia [T, tau_phi, tau_theta, tau_psi] -> [w1^2, w2^2, w3^2, w4^2]
     b, d, l = quad.b, quad.d, quad.l
     # Matriz de alocação: [T; tau_phi; tau_theta; tau_psi] = A * [w1^2; ...; w4^2]
@@ -192,7 +169,6 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
                              [0, -l*b, 0, l*b],
                              [l*b, 0, -l*b, 0],
                              [d, -d, d, -d]])
-    # Usamos a inversa para encontrar as velocidades dos motores
     inv_alloc_matrix = np.linalg.inv(alloc_matrix)
 
     # Velocidade máxima do motor (para clamp/clip)
@@ -200,8 +176,6 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
     max_thrust_per_motor = (quad.m * quad.g * 2) / 4.0
     max_w_sq = max_thrust_per_motor / quad.b
     max_w = np.sqrt(max_w_sq)
-
-    # --- Ponto 4: O Loop de Simulação ---
     
     print(f"Iniciando simulação controlada para: {target_pos[:3]}...")
     
@@ -219,29 +193,23 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
         # Estado atual
         x, y, z, vx, vy, vz, phi, theta, psi, p, q, r = state
         
-        # --- Loop de Controle ---
         
-        # 1. Loop Externo (Posição) -> Calcula Setpoints para o Loop Interno
-        
+        # Posição -> Calcula Setpoints para o Loop Interno
         # Empuxo Total (calculado pelo PID de altitude)
-        # Adicionamos 'feed-forward' (m*g) para compensar a gravidade
         thrust_correction = pid_z.update(z, dt)
         total_thrust = (quad.m * quad.g) + thrust_correction
         
         # Ângulos de Roll/Pitch desejados (calculados pelos PIDs X e Y)
-        # Nota: Um erro em X positivo requer um Pitch (theta) positivo.
-        #       Um erro em Y positivo requer um Roll (phi) NEGATIVO.
         theta_des = pid_x.update(x, dt)
         phi_des = -pid_y.update(y, dt)
-        psi_des = target_pos[3] # Fixo
+        psi_des = target_pos[3] 
         
-        # Limita os ângulos (margem de erro/segurança)
-        max_angle = np.deg2rad(30) # Limite de 30 graus
+        # Limita os ângulos
+        max_angle = np.deg2rad(30) 
         phi_des = np.clip(phi_des, -max_angle, max_angle)
         theta_des = np.clip(theta_des, -max_angle, max_angle)
 
-        # 2. Loop Interno (Atitude) -> Calcula Torques desejados
-        
+        # Atitude -> Calcula Torques desejados
         # Define os setpoints dinâmicos
         pid_phi.set_setpoint(phi_des)
         pid_theta.set_setpoint(theta_des)
@@ -252,29 +220,24 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
         tau_theta = pid_theta.update(theta, dt)
         tau_psi = pid_psi.update(psi, dt)
 
-        # 3. Misturador de Controle -> Calcula velocidades dos motores
+        # velocidades dos motores
         
         # Vetor de controle desejado
         control_vector = np.array([total_thrust, tau_phi, tau_theta, tau_psi])
         
-        # Calcula o quadrado das velocidades angulares
         w_squared = inv_alloc_matrix @ control_vector
         
-        # Garante que as velocidades sejam positivas e dentro dos limites
         w_squared = np.clip(w_squared, 0, max_w_sq)
         
         # Entradas finais para o modelo dinâmico
         inputs = np.sqrt(w_squared)
-        # inputs = np.clip(inputs, 0, max_w) # O clip em w_squared já resolve
         
-        # --- Fim do Loop de Controle ---
         
-        # 4. Atualização da Dinâmica (Integração de Euler)
-        # (Usar RK4 seria mais preciso, mas Euler é mais simples)
+        # Atualização da Dinâmica (Integração de Euler)
         state_dot = quad.dynamics(time, state, inputs)
         state = state + np.array(state_dot) * dt
         
-        # 5. Armazenamento
+        # Armazenamento
         time += dt
         times.append(time)
         states.append(state.copy())
@@ -282,15 +245,14 @@ def run_pid_simulation(quad, target_pos, duration, dt=0.01):
     print("Simulação concluída.")
     
     # Formata a saída para ser compatível com a função de animação
-    # (solve_ivp retorna (N_estados, N_pontos), então transpomos)
-    solution = type('Solution', (object,), {})() # Objeto 'dummy'
+    solution = type('Solution', (object,), {})() 
     solution.t = np.array(times)
-    solution.y = np.array(states).T # Transpor
+    solution.y = np.array(states).T 
     
     return solution
 
 # ==============================================================================
-# 4. FUNÇÃO DE ANIMAÇÃO (COMO NO SEU CÓDIGO ORIGINAL)
+# 4. FUNÇÃO DE ANIMAÇÃO
 # ==============================================================================
 def animate_and_save_3d(sol, movement_type, duration, quad_params):
     """
@@ -307,7 +269,7 @@ def animate_and_save_3d(sol, movement_type, duration, quad_params):
     max_range = max(np.max(x_data) - np.min(x_data), 
                     np.max(y_data) - np.min(y_data), 
                     np.max(z_data) - np.min(z_data))
-    if max_range < 1.0: max_range = 1.0 # Garante um zoom mínimo
+    if max_range < 1.0: max_range = 1.0 
     
     mid_x = (np.max(x_data) + np.min(x_data)) / 2
     mid_y = (np.max(y_data) + np.min(y_data)) / 2
