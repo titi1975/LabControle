@@ -9,15 +9,12 @@
 // =================================================================================
 
 // FÍSICA
-// Voltamos para 20 para ter melhor resolução de RPM.
-// A correção de distância (x2) será feita na função atualizarOdometria.
 const int FUROS_DISCO = 20; 
 const float RAIO_RODA_CM = 3.25; 
 const float CIRCUNFERENCIA = 2 * PI * RAIO_RODA_CM;
 const float DISTANCIA_POR_PULSO = CIRCUNFERENCIA / FUROS_DISCO;
 
 // TIMERS
-// Aumentado para 100ms para garantir leitura estável de RPM em baixas velocidades
 const unsigned long INTERVALO_CONTROLE = 100;  
 const unsigned long INTERVALO_TELEMETRIA = 300;
 
@@ -26,7 +23,7 @@ const float TOLERANCIA_ANGULO = 3.0;
 const float TOLERANCIA_DISTANCIA = 3.0;       
 
 // LIMITES
-const int RPM_MAX = 200; // Aumentado margem
+const int RPM_MAX = 200; 
 const int PWM_MIN_MOVIMENTO = 60; 
 
 // --- GANHOS PID ---
@@ -42,13 +39,12 @@ const float KI_HEAD = 0.0;
 const float KD_HEAD = 0.1;
 
 // PID MOTOR (RPM -> PWM)
-// Ajustado para o novo intervalo de 100ms
-const float KP_RPM = 1.0;   // Suavizado para evitar oscilação
+const float KP_RPM = 1.0;   
 const float KI_RPM = 0.8;   
 const float KD_RPM = 0.0;
 const float KF_RPM = 1.0;   // Feedforward
 
-// Fator de Filtro (0.0 a 1.0). Quanto menor, mais suave (menos ruído), mas mais lento.
+// Fator de Filtro (0.0 a 1.0).
 const float FILTRO_RPM = 0.6; 
 
 // =================================================================================
@@ -140,7 +136,7 @@ void setup() {
   
   calibrarGiroscopio();
   Stop();
-  Serial.println("V10 ESTAVEL");
+  Serial.println("V11 - COMANDO F VARIAVEL");
 }
 
 // =================================================================================
@@ -246,8 +242,6 @@ void ajustarMotor(AF_DCMotor &motor, int &pwmOut, int rpmAtual, int rpmAlvo, PID
 // =================================================================================
 void atualizarOdometria() {
   // Fator = 60000 / (FUROS * INTERVALO). 
-  // Ex: 60000 / (20 * 100) = 30.
-  // 1 pulso = 30 RPM. 2 pulsos = 60 RPM. Resolução aceitável.
   unsigned long fator = 60000 / (FUROS_DISCO * INTERVALO_CONTROLE);
   
   int rpmInst1 = pulsos1 * fator;
@@ -255,7 +249,7 @@ void atualizarOdometria() {
   int rpmInst3 = pulsos3 * fator;
   int rpmInst4 = pulsos4 * fator;
 
-  // Filtro Média Móvel Exponencial (Suaviza o ruído do sensor)
+  // Filtro Média Móvel Exponencial
   rpmFilt1 = (FILTRO_RPM * rpmFilt1) + ((1.0 - FILTRO_RPM) * rpmInst1);
   rpmFilt2 = (FILTRO_RPM * rpmFilt2) + ((1.0 - FILTRO_RPM) * rpmInst2);
   rpmFilt3 = (FILTRO_RPM * rpmFilt3) + ((1.0 - FILTRO_RPM) * rpmInst3);
@@ -275,7 +269,7 @@ void atualizarOdometria() {
 }
 
 // =================================================================================
-// --- COMANDOS ---
+// --- COMANDOS (MODIFICADO) ---
 // =================================================================================
 void processarComando(String cmd) {
   cmd.toUpperCase(); 
@@ -305,7 +299,7 @@ void processarComando(String cmd) {
       bluetoothSerial.println("OK:ANG");
     }
   }
-  // M: Manual RPM (M1:120)
+  // M: Manual RPM Individual (M1:120)
   else if (cmd.startsWith("M") && isDigit(cmd.charAt(1))) {
     modoAtual = RPM_MANUAL;
     manualForward = true;
@@ -319,18 +313,36 @@ void processarComando(String cmd) {
     if (motorID == 2) targetRPM2 = val;
     if (motorID == 3) targetRPM3 = val;
     if (motorID == 4) targetRPM4 = val;
-  } 
-  // Comandos F, B, L, R
+  }
+  // --- NOVA LÓGICA PARA FRENTE COM VELOCIDADE (F:x) ---
+  else if (cmd.startsWith("F")) {
+    modoAtual = RPM_MANUAL;
+    manualForward = true;
+    
+    int velocidade = 120; // Valor padrão de segurança
+    
+    int sep = cmd.indexOf(':');
+    if (sep != -1) {
+       // Lê o valor após ':'
+       velocidade = cmd.substring(sep + 1).toInt();
+    }
+
+    // Segurança: limita entre 0 e RPM_MAX
+    velocidade = constrain(velocidade, 0, RPM_MAX);
+
+    targetRPM1 = velocidade; 
+    targetRPM2 = velocidade; 
+    targetRPM3 = velocidade; 
+    targetRPM4 = velocidade;
+  }
+  // Comandos B, L, R, S
   else {
     char c = cmd.charAt(0);
     modoAtual = RPM_MANUAL; 
-    int defaultRPM = 120; // Velocidade padrão segura
+    int defaultRPM = 120; // Velocidade padrão segura para giros
     
     switch (c) {
-      case 'F': 
-        manualForward = true;
-        targetRPM1=defaultRPM; targetRPM2=defaultRPM; targetRPM3=defaultRPM; targetRPM4=defaultRPM; 
-        break;
+      // 'F' removido daqui pois é tratado acima
       case 'B': 
         manualForward = false;
         targetRPM1=-defaultRPM; targetRPM2=-defaultRPM; targetRPM3=-defaultRPM; targetRPM4=-defaultRPM; 
